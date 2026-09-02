@@ -815,44 +815,46 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      for (const u in graphData.adj_list) {
-        const neighbors = graphData.adj_list[u];
-        const p1 = nodePositions[u];
-        if (!p1) continue;
+      if (graphData && graphData.adj_list) {
+        Object.keys(graphData.adj_list).forEach(u => {
+          const neighbors = graphData.adj_list[u] || [];
+          const p1 = nodePositions[u];
+          if (!p1) return;
 
-        neighbors.forEach(v => {
-          const p2 = nodePositions[v];
-          if (!p2) continue;
+          neighbors.forEach(v => {
+            const p2 = nodePositions[v];
+            if (!p2) return;
 
-          const isCycleEdge = cycleNodes.has(u) && cycleNodes.has(v);
+            const isCycleEdge = cycleNodes.has(u) && cycleNodes.has(v);
 
-          ctx.beginPath();
-          ctx.strokeStyle = isCycleEdge ? '#ef4444' : 'rgba(56, 189, 248, 0.4)';
-          ctx.lineWidth = isCycleEdge ? 2.5 : 1.5;
+            ctx.beginPath();
+            ctx.strokeStyle = isCycleEdge ? '#ef4444' : 'rgba(56, 189, 248, 0.4)';
+            ctx.lineWidth = isCycleEdge ? 2.5 : 1.5;
 
-          const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-          const nodeR = 24;
-          const startX = p1.x + nodeR * Math.cos(angle);
-          const startY = p1.y + nodeR * Math.sin(angle);
-          const endX = p2.x - nodeR * Math.cos(angle);
-          const endY = p2.y - nodeR * Math.sin(angle);
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+            const nodeR = 24;
+            const startX = p1.x + nodeR * Math.cos(angle);
+            const startY = p1.y + nodeR * Math.sin(angle);
+            const endX = p2.x - nodeR * Math.cos(angle);
+            const endY = p2.y - nodeR * Math.sin(angle);
 
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
-          ctx.stroke();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
 
-          const headLen = 9;
-          ctx.beginPath();
-          ctx.fillStyle = isCycleEdge ? '#ef4444' : '#38bdf8';
-          ctx.moveTo(endX, endY);
-          ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
-          ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
-          ctx.closePath();
-          ctx.fill();
+            const headLen = 9;
+            ctx.beginPath();
+            ctx.fillStyle = isCycleEdge ? '#ef4444' : '#38bdf8';
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+          });
         });
       }
 
-      for (const code in nodePositions) {
+      Object.keys(nodePositions).forEach(code => {
         const p = nodePositions[code];
         const isCycle = cycleNodes.has(code);
         const isEntry = p.indegree === 0;
@@ -890,7 +892,7 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         ctx.fillStyle = isCycle ? '#ef4444' : '#38bdf8';
         ctx.font = '9px monospace';
         ctx.fillText(p.indegree, p.x + 16, p.y - 14);
-      }
+      });
     }
 
     async function runBFS() {
@@ -1142,11 +1144,11 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(html.encode("utf-8"))
 
 
-def run_server(port: int = PORT) -> socketserver.TCPServer:
-    """Starts the embedded localhost web server."""
+def run_server(port: int = PORT) -> http.server.ThreadingHTTPServer:
+    """Starts the embedded localhost multi-threaded web server."""
     handler = PrerequisiteAPIHandler
-    socketserver.TCPServer.allow_reuse_address = True
-    httpd = socketserver.TCPServer(("0.0.0.0", port), handler)
+    http.server.ThreadingHTTPServer.allow_reuse_address = True
+    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
     print(f"Localhost web application running at: http://localhost:{port}/")
     return httpd
 
