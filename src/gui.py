@@ -17,6 +17,7 @@ from src.topological_sort import TopologicalSort
 from src.cycle_detector import CycleDetector
 from src.validator import OrderValidator
 from src.test_suite import TestSuite
+from src.database import DatabaseManager
 
 
 class CoursePrerequisiteGUI:
@@ -24,12 +25,16 @@ class CoursePrerequisiteGUI:
 
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("University Course Prerequisite Management System")
-        self.root.geometry("1100x780")
-        self.root.minsize(950, 650)
+        self.root.title("University Course Prerequisite Management System - CSE Department")
+        self.root.geometry("1100x820")
+        self.root.minsize(950, 680)
 
-        # Graph Data Model
-        self.graph = CourseGraph()
+        # Database and Graph Model
+        self.db = DatabaseManager()
+        self.graph = self.db.load_graph_from_db()
+        if self.graph.get_num_vertices() == 0:
+            self.graph.load_sample_dataset()
+            self.db.save_graph_to_db(self.graph)
         self.last_order = []
 
         # Configure Aesthetics & Styles
@@ -184,6 +189,15 @@ class CoursePrerequisiteGUI:
 
         btn_tests = ttk.Button(box, text="6. Run All Test Cases (TC1 - TC6)", command=self.on_run_test_suite)
         btn_tests.pack(fill=tk.X, pady=2)
+
+        btn_db_info = ttk.Button(box, text="7. Assignment Info & Rubrics (DB)", command=self.on_view_assignment_rubrics)
+        btn_db_info.pack(fill=tk.X, pady=2)
+
+        btn_db_save = ttk.Button(box, text="8. Save Graph to SQLite DB", command=self.on_save_db)
+        btn_db_save.pack(fill=tk.X, pady=2)
+
+        btn_db_load = ttk.Button(box, text="9. Load Graph from SQLite DB", command=self.on_load_db)
+        btn_db_load.pack(fill=tk.X, pady=2)
 
     def _build_footer_buttons(self, parent):
         f_box = ttk.Frame(parent)
@@ -350,6 +364,52 @@ class CoursePrerequisiteGUI:
         results = TestSuite.run_all_tests()
         summary = TestSuite.format_summary_report(results)
         self._write_console(summary)
+
+    def on_save_db(self):
+        try:
+            self.db.save_graph_to_db(self.graph)
+            messagebox.showinfo("SQLite Database", "Current curriculum graph successfully saved to 'curriculum.db'.")
+            self._write_console("[SQLITE] Graph persisted successfully to 'curriculum.db'.")
+        except Exception as e:
+            messagebox.showerror("Database Error", str(e))
+
+    def on_load_db(self):
+        try:
+            self.graph = self.db.load_graph_from_db()
+            self.last_order = []
+            self.on_display_graph()
+            messagebox.showinfo("SQLite Database", "Curriculum graph reloaded from 'curriculum.db'.")
+        except Exception as e:
+            messagebox.showerror("Database Error", str(e))
+
+    def on_view_assignment_rubrics(self):
+        summary = self.db.get_database_summary()
+        meta = summary.get("assignment_metadata", {})
+        rubrics = summary.get("rubrics", [])
+
+        msg = []
+        msg.append("=" * 75)
+        msg.append("DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING – ASSIGNMENT SPECIFICATION")
+        msg.append("=" * 75)
+        msg.append(f"Institution:     {meta.get('institution', 'Department of Computer Science and Engineering')}")
+        msg.append(f"Course:          {meta.get('course_code_name', 'CSA03 – Data Structures – Slot D')}")
+        msg.append(f"Course Outcome:  {meta.get('course_outcome', 'CO5')}")
+        msg.append(f"Bloom's Level:   {meta.get('blooms_taxonomy', 'L4 – Analyze')}")
+        msg.append(f"SDG Mapping:     {meta.get('sdg_mapping', 'SDG 4 & SDG 9')}")
+        msg.append("-" * 75)
+        msg.append("ASSIGNMENT TITLE:")
+        msg.append(f"{meta.get('assignment_title', '')}\n")
+        msg.append("=" * 75)
+        msg.append(f"{'OFFICIAL ASSESSMENT RUBRICS (TOTAL: 100 MARKS)':^75}")
+        msg.append("=" * 75)
+        for idx, r in enumerate(rubrics, 1):
+            msg.append(f"\n{idx}. {r['criteria']} ({r['co_mapping']}) — [Max Marks: {r['max_marks']}]")
+            msg.append(f"   * Excellent:         {r['excellent']}")
+            msg.append(f"   * Good:              {r['good']}")
+            msg.append(f"   * Satisfactory:      {r['satisfactory']}")
+            msg.append(f"   * Needs Improvement: {r['needs_improvement']}")
+        msg.append("\n" + "=" * 75)
+        self._write_console("\n".join(msg))
 
     def on_reset(self):
         self.entry_code.delete(0, tk.END)

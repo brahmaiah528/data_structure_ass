@@ -1,9 +1,25 @@
 # Comprehensive Academic Project Report
 
+**DEPARTMENT:** Department of Computer Science and Engineering  
 **COURSE:** CSA03 – Data Structures (Slot D)  
+**ASSIGNMENT TITLE:** Design a graph representation of this prerequisite system and use Topological Sort to generate a valid course-taking order. Your design must also detect whether the prerequisite system contains a cycle. Analyze what the existence of a cycle means in the real-world university scenario and compare a BFS-based and DFS-based approach for solving the problem.  
 **COURSE OUTCOME:** CO5 – Develop robust graph-based solutions by implementing and analyzing graph algorithms for real-world applications.  
-**PROJECT TITLE:** University Course Prerequisite Management System Using Topological Sort  
-**SDG MAPPING:** SDG 4 (Quality Education) & SDG 9 (Industry, Innovation and Infrastructure)
+**BLOOM’S TAXONOMY LEVEL:** L4 – Analyze  
+**SDG MAPPING:** SDG 4 (Quality Education) & SDG 9 (Industry, Innovation and Infrastructure) with relevance to SDG 11 (Sustainable Cities and Communities)  
+**GITHUB REPOSITORY:** [https://github.com/brahmaiah528/data_structure_assign](https://github.com/brahmaiah528/data_structure_assign)
+
+---
+
+### Assessment Rubrics & Marking Scheme (Total: 100 Marks)
+
+| Criteria (CO Mapping) | Max Marks | Excellent | Good | Satisfactory | Needs Improvement |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| **1. Graph Representation & Prerequisite Modeling (CO5)** | **15** | Accurate graph, courses, and prerequisites with Adjacency List representation and SQLite persistence | Minor graph errors | Several missing relationships | Major graph errors |
+| **2. Topological Sort & Valid Course-Taking Order (CO5)** | **20** | Correct sort and valid course order verified by formal precedence validation $[pos(u) < pos(v)]$ | Minor sorting errors | Partially correct course order | Invalid course order |
+| **3. Cycle Detection & Real-World Interpretation (CO5)** | **15** | Accurate cycle detection in both BFS and DFS with clear real-world university impact analysis | Correct cycle identification | Limited cycle explanation | Unable to detect cycles |
+| **4. BFS vs DFS Comparison & Algorithm Analysis (CO5)** | **15** | Thorough 11-dimension BFS-DFS comparison across logic, data structures, and complexity | Good comparison with minor omissions | Basic comparison, lacks details | Incomplete or inaccurate comparison |
+| **5. Solution Justification & University Application (CO5)** | **25** | Efficient solution with rigorous institutional justification as primary/secondary registration engines | Suitable solution and justification | Limited justification and analysis | Poor or impractical solution |
+| **6. Reflection: Design Decisions, SDG Relevance & Learning Outcomes** | **10** | Thoughtful justification of design choices, clear connection to SDG 4, 9, and 11, and specific account of challenges and learnings | General justification; sustainability mentioned but lacks depth | Reflection present but generic; limited justification or vague outcomes | No genuine reflection submitted, or content is generic |
 
 ---
 
@@ -16,25 +32,27 @@ When curriculum designers establish prerequisite rules, complex dependency chain
 
 ## 2. Objective
 The primary objectives of this project are:
-1. Model university academic curriculum structures using a Directed Graph with an Adjacency List representation.
+1. Model university academic curriculum structures using a Directed Graph with an Adjacency List representation and persistent SQLite database storage (`curriculum.db`).
 2. Implement Breadth-First Search (BFS) Topological Sort using Kahn’s Algorithm.
 3. Implement Depth-First Search (DFS) Topological Sort using 3-State Vertex Coloring (`UNVISITED`, `VISITING`, `VISITED`).
 4. Implement and compare cycle detection mechanisms across both BFS and DFS pipelines.
 5. Provide automated formal validation verifying that for every prerequisite edge $u \to v$, $\text{position}(u) < \text{position}(v)$.
 6. Demonstrate all operations via a desktop GUI (Tkinter) and a zero-dependency localhost web dashboard (`http://localhost:8000`).
-7. Evaluate the computational complexity and institutional significance of the algorithms with direct alignment to SDG 4 and SDG 9.
+7. Evaluate the computational complexity and institutional significance of the algorithms with direct alignment to SDG 4 and SDG 9 (with SDG 11 digital infrastructure).
 
 ---
 
 ## 3. Requirements and Environment Used
 
 ### Hardware & Software Environment
+- **Department:** Department of Computer Science and Engineering
 - **Operating System:** Microsoft Windows 11 / Multi-Platform POSIX compatible
 - **Programming Language:** Python 3.13.14 (Pure Standard Library)
+- **Database Engine:** Embedded SQLite 3 (`curriculum.db`) storing courses, prerequisites, metadata, rubrics, and execution logs
 - **Primary Data Structures:** Dynamic Hash Tables (`dict`), Hash Sets (`set`), FIFO Queues (`collections.deque`), LIFO Stacks (`list`), Encapsulated Entity Classes
 - **User Interfaces:**
   - Desktop GUI: Python standard `tkinter` and `ttk`
-  - Localhost Web Application: Embedded `http.server` running on port 8000
+  - Localhost Web Application: Embedded `http.server` running on port 8000 with interactive SVG/Canvas
 - **Build & Execution Tools:** Standard Python interpreter (`python main.py`)
 - **Version Control:** Git & GitHub (`https://github.com/brahmaiah528/data_structure_assign`)
 

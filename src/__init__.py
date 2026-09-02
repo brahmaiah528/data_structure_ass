@@ -11,6 +11,7 @@ from src.topological_sort import TopologicalSort
 from src.cycle_detector import CycleDetector
 from src.validator import OrderValidator
 from src.test_suite import TestSuite
+from src.database import DatabaseManager
 
 __all__ = [
     "Course",
@@ -18,5 +19,6 @@ __all__ = [
     "TopologicalSort",
     "CycleDetector",
     "OrderValidator",
-    "TestSuite"
+    "TestSuite",
+    "DatabaseManager"
 ]

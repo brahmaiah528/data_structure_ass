@@ -6,11 +6,35 @@
 [![SDG 9](https://img.shields.io/badge/SDG%209-Industry%20%26%20Infrastructure-orange.svg)](https://sdgs.un.org/goals/goal9)
 [![License](https://img.shields.io/badge/Academic%20Project-CSA03%20Slot%20D-purple.svg)](#)
 
-> **Course:** CSA03 – Data Structures – Slot D  
+> **Department:** Department of Computer Science and Engineering  
+> **Course Code & Name:** CSA03 – Data Structures – Slot D  
+> **Assignment Title:** Design a graph representation of this prerequisite system and use Topological Sort to generate a valid course-taking order. Your design must also detect whether the prerequisite system contains a cycle. Analyze what the existence of a cycle means in the real-world university scenario and compare a BFS-based and DFS-based approach for solving the problem.  
 > **Course Outcome:** CO5 – Develop robust graph-based solutions by implementing and analyzing graph algorithms for real-world applications.  
-> **SDG Mapping:** SDG 4 (Quality Education) & SDG 9 (Industry, Innovation and Infrastructure)
+> **Bloom's Taxonomy Level:** L4 – Analyze  
+> **SDG Mapping:** SDG 4 (Quality Education) & SDG 9 (Industry, Innovation and Infrastructure) with SDG 11 relevance  
+> **Database:** SQLite 3 (`curriculum.db`) Persistent Storage Engine  
+> **GitHub Repository:** [https://github.com/brahmaiah528/data_structure_assign](https://github.com/brahmaiah528/data_structure_assign)
 
 ---
+
+### Assessment Rubrics & Marking Scheme (Total: 100 Marks)
+
+| Criteria (CO Mapping) | Max Marks | Excellent | Good | Satisfactory | Needs Improvement |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| **1. Graph Representation & Prerequisite Modeling (CO5)** | **15** | Accurate graph, courses, and prerequisites with Adjacency List & SQLite persistence | Minor graph errors | Several missing relationships | Major graph errors |
+| **2. Topological Sort & Valid Course-Taking Order (CO5)** | **20** | Correct sort and valid course order verified by formal precedence validation $[pos(u) < pos(v)]$ | Minor sorting errors | Partially correct course order | Invalid course order |
+| **3. Cycle Detection & Real-World Interpretation (CO5)** | **15** | Accurate cycle detection in both BFS and DFS with clear real-world university impact analysis | Correct cycle identification | Limited cycle explanation | Unable to detect cycles |
+| **4. BFS vs DFS Comparison & Algorithm Analysis (CO5)** | **15** | Thorough 11-dimension BFS-DFS comparison across logic, data structures, and complexity | Good comparison with minor omissions | Basic comparison, lacks details | Incomplete or inaccurate comparison |
+| **5. Solution Justification & University Application (CO5)** | **25** | Efficient solution with rigorous institutional justification as primary/secondary registration engines | Suitable solution and justification | Limited justification and analysis | Poor or impractical solution |
+| **6. Reflection: Design Decisions, SDG Relevance & Learning Outcomes** | **10** | Thoughtful justification of design choices, clear connection to SDG 4, 9, and 11, and specific account of challenges and learnings | General justification; sustainability mentioned but lacks depth | Reflection present but generic; limited justification or vague outcomes | No genuine reflection submitted, or content is generic |
+
+---
+
+### Deliverables
+1. **Pseudo code:** [docs/pseudocode.md](docs/pseudocode.md)
+2. **Implementation & Results:** [src/](src/) (Python) & [java_src/](java_src/) (Java) & [screenshots/](screenshots/)
+3. **GitHub Upload Link:** [https://github.com/brahmaiah528/data_structure_assign](https://github.com/brahmaiah528/data_structure_assign)
+4. **One Page Write-up:** [docs/one-page-writeup.md](docs/one-page-writeup.md)
 
 ## Table of Contents
 1. [Project Overview](#project-overview)

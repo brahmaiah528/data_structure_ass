@@ -2,9 +2,12 @@
 Embedded Localhost Web Server & REST API for the University Course Prerequisite Management System.
 Uses Python standard library http.server (Zero external dependencies).
 
-Runs on http://localhost:8000 / http://127.0.0.1:8000
-Provides an interactive web dashboard with dynamic graph visualizers, live step simulators,
-cycle analysis, and academic test case reporting.
+Integrated with SQLite database (curriculum.db) for:
+- Department of Computer Science and Engineering assignment specifications
+- Course Outcome CO5, Bloom's Level L4, and SDG mappings (SDG 4, 9, 11)
+- Assessment Rubrics (100 marks total)
+- Persistent course catalogue and prerequisite graph storage
+- Execution audit trails
 """
 
 import http.server
@@ -18,17 +21,21 @@ from src.topological_sort import TopologicalSort
 from src.cycle_detector import CycleDetector
 from src.validator import OrderValidator
 from src.test_suite import TestSuite
+from src.database import DatabaseManager
 
 PORT = 8000
-SHARED_GRAPH = CourseGraph()
-SHARED_GRAPH.load_sample_dataset()
+DB = DatabaseManager()
+SHARED_GRAPH = DB.load_graph_from_db()
+if SHARED_GRAPH.get_num_vertices() == 0:
+    SHARED_GRAPH.load_sample_dataset()
+    DB.save_graph_to_db(SHARED_GRAPH)
 
 
 class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
-    """HTTP Request Handler providing REST API and Interactive Dashboard."""
+    """HTTP Request Handler providing REST API, SQLite persistence, and Interactive Dashboard."""
 
     def log_message(self, format, *args):
-        # Suppress noisy logging in console
+        # Suppress verbose terminal logging
         pass
 
     def _send_json(self, data: dict, status: int = 200):
@@ -59,15 +66,36 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
             res = TopologicalSort.kahn_sort(SHARED_GRAPH)
             data = res.to_dict()
             data["report"] = res.format_report(SHARED_GRAPH)
+            DB.log_execution(
+                "BFS / Kahn's Algorithm",
+                res.has_cycle,
+                res.order,
+                [],
+                "PASSED" if (res.success and not res.has_cycle) else "FAILED (Cycle Detected)"
+            )
             self._send_json(data)
         elif path == "/api/dfs":
             res = TopologicalSort.dfs_sort(SHARED_GRAPH)
             data = res.to_dict()
             data["report"] = res.format_report(SHARED_GRAPH)
+            DB.log_execution(
+                "DFS Topological Sort",
+                res.has_cycle,
+                res.order,
+                [],
+                "PASSED" if (res.success and not res.has_cycle) else "FAILED (Cycle Detected)"
+            )
             self._send_json(data)
         elif path == "/api/cycle":
             bfs_rep = CycleDetector.detect_cycle_bfs(SHARED_GRAPH)
             dfs_rep = CycleDetector.detect_cycle_dfs(SHARED_GRAPH)
+            DB.log_execution(
+                "Cycle Detector (Dual Engine)",
+                dfs_rep.cycle_detected,
+                [],
+                dfs_rep.cycle_path,
+                "CYCLE DETECTED" if dfs_rep.cycle_detected else "NO CYCLE"
+            )
             self._send_json({
                 "bfs": {
                     "detected": bfs_rep.cycle_detected,
@@ -86,6 +114,13 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
             res_kahn = TopologicalSort.kahn_sort(SHARED_GRAPH)
             if res_kahn.success:
                 val = OrderValidator.validate(SHARED_GRAPH, res_kahn.order)
+                DB.log_execution(
+                    "Order Validation",
+                    False,
+                    res_kahn.order,
+                    [],
+                    "PASSED" if val.passed else "FAILED"
+                )
                 self._send_json({
                     "passed": val.passed,
                     "order": res_kahn.order,
@@ -103,10 +138,13 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
                 "summary": TestSuite.format_summary_report(results),
                 "test_cases": [r.to_dict() for r in results]
             })
+        elif path == "/api/database":
+            self._send_json(DB.get_database_summary())
         else:
             self.send_error(404, "Endpoint not found")
 
     def do_POST(self):
+        global SHARED_GRAPH
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         length = int(self.headers.get("Content-Length", 0))
@@ -118,19 +156,33 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/load-sample":
             SHARED_GRAPH.load_sample_dataset()
-            self._send_json({"message": "Sample 12-course DAG dataset loaded successfully."})
+            DB.save_graph_to_db(SHARED_GRAPH)
+            self._send_json({"message": "Sample 12-course DAG dataset loaded and persisted to SQLite."})
         elif path == "/api/load-cyclic":
             SHARED_GRAPH.load_cyclic_dataset()
-            self._send_json({"message": "Cyclic prerequisite dataset loaded successfully."})
+            self._send_json({"message": "Cyclic prerequisite dataset loaded into memory."})
         elif path == "/api/clear":
             SHARED_GRAPH.clear()
-            self._send_json({"message": "Curriculum graph cleared."})
+            DB.save_graph_to_db(SHARED_GRAPH)
+            self._send_json({"message": "Curriculum graph cleared and updated in SQLite."})
+        elif path == "/api/database/save":
+            DB.save_graph_to_db(SHARED_GRAPH)
+            self._send_json({"success": True, "message": "Current in-memory graph persisted to curriculum.db."})
+        elif path == "/api/database/load":
+            SHARED_GRAPH = DB.load_graph_from_db()
+            self._send_json({"success": True, "message": "Graph successfully reloaded from curriculum.db."})
+        elif path == "/api/database/reset":
+            DB.init_db()
+            DB.seed_default_data()
+            SHARED_GRAPH = DB.load_graph_from_db()
+            self._send_json({"success": True, "message": "Database reset and re-seeded with official CSE curriculum."})
         elif path == "/api/course":
             code = payload.get("code", "")
             title = payload.get("title", "")
             credits = payload.get("credits", 3)
             try:
                 c = SHARED_GRAPH.add_course(code, title, credits)
+                DB.save_graph_to_db(SHARED_GRAPH)
                 self._send_json({"success": True, "course": c.to_dict()})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, status=400)
@@ -139,6 +191,7 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
             target = payload.get("target", "")
             try:
                 SHARED_GRAPH.add_prerequisite(prereq, target)
+                DB.save_graph_to_db(SHARED_GRAPH)
                 self._send_json({"success": True, "edge": [prereq.upper(), target.upper()]})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, status=400)
@@ -152,7 +205,7 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>University Course Prerequisite Management System</title>
+  <title>University Course Prerequisite Management System - CSE Assignment</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -222,6 +275,11 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       background: rgba(16, 185, 129, 0.12);
       border-color: rgba(16, 185, 129, 0.3);
       color: var(--accent-green);
+    }
+    .badge.db {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: var(--accent-amber);
     }
     .container {
       max-width: 1440px;
@@ -326,6 +384,7 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       gap: 0.5rem;
       border-bottom: 1px solid var(--border-card);
       padding-bottom: 0.5rem;
+      flex-wrap: wrap;
     }
     .tab-btn {
       background: transparent;
@@ -427,20 +486,20 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       letter-spacing: 0.05em;
       margin-top: 0.2rem;
     }
-    table.test-table {
+    table.data-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.82rem;
       margin-top: 0.5rem;
     }
-    table.test-table th {
+    table.data-table th {
       background: rgba(255, 255, 255, 0.05);
       text-align: left;
       padding: 0.6rem;
       border-bottom: 1px solid var(--border-card);
       color: var(--text-muted);
     }
-    table.test-table td {
+    table.data-table td {
       padding: 0.6rem;
       border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     }
@@ -453,18 +512,40 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
     }
     .status-passed { background: rgba(16, 185, 129, 0.2); color: #34d399; }
     .status-failed { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .rubric-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.85rem;
+    }
+    .rubric-header {
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+      color: #38bdf8;
+      margin-bottom: 0.4rem;
+    }
+    .rubric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="header-title">
       <h1>University Course Prerequisite Management System</h1>
-      <p>Course: CSA03 – Data Structures (Slot D) | Outcome: CO5 (Robust Graph-Based Solutions)</p>
+      <p>Department of Computer Science and Engineering | CSA03 – Data Structures (Slot D) | CO5 (L4 Analyze)</p>
     </div>
-    <div style="display:flex; gap:0.5rem;">
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+      <span class="badge db">SQLite (curriculum.db)</span>
       <span class="badge sdg">SDG 4: Quality Education</span>
       <span class="badge sdg">SDG 9: Industry & Infrastructure</span>
-      <span class="badge">Kahn BFS & 3-State DFS</span>
     </div>
   </header>
 
@@ -541,6 +622,7 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         <button class="tab-btn" onclick="switchTab('tab-order')">Topological Order</button>
         <button class="tab-btn" onclick="switchTab('tab-console')">Execution Diagnostics</button>
         <button class="tab-btn" onclick="switchTab('tab-tests')">Academic Test Suite</button>
+        <button class="tab-btn" onclick="switchTab('tab-database')">Database & Rubrics</button>
       </div>
 
       <!-- TAB 1: GRAPH VISUALIZER -->
@@ -584,7 +666,7 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         <div class="card">
           <div class="card-title">Automated Academic Test Cases (TC-01 to TC-06)</div>
           <div style="overflow-x:auto;">
-            <table class="test-table" id="test-table">
+            <table class="data-table" id="test-table">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -601,6 +683,62 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
           </div>
         </div>
       </div>
+
+      <!-- TAB 5: DATABASE & RUBRICS -->
+      <div id="tab-database" class="tab-content">
+        <div class="card">
+          <div class="card-title">
+            Department Assignment Specifications & SQLite Database
+            <span class="badge db">curriculum.db</span>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn btn-secondary" style="width:auto;" onclick="saveToDB()">💾 Save In-Memory Graph to SQLite</button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="loadFromDB()">📂 Reload Graph from SQLite</button>
+            <button class="btn btn-secondary" style="width:auto;" onclick="resetDB()">🔄 Reset Database to Official Curriculum</button>
+          </div>
+
+          <!-- Assignment Metadata Box -->
+          <div style="background:rgba(15,23,42,0.6); padding:1rem; border-radius:8px; margin-bottom:1rem; border:1px solid var(--border-card);">
+            <div style="font-weight:700; color:#38bdf8; font-size:1rem; margin-bottom:0.3rem;" id="db-dept">Department of Computer Science and Engineering</div>
+            <div style="font-size:0.85rem; color:#f8fafc;" id="db-course">CSA03 – Data Structures – Slot D</div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;" id="db-title">Assignment Title: Graph Representation, Topological Sort & Cycle Detection</div>
+            <div style="display:flex; gap:0.5rem; margin-top:0.6rem; flex-wrap:wrap;">
+              <span class="badge">CO5: Robust Graph Solutions</span>
+              <span class="badge">Bloom: L4 (Analyze)</span>
+              <span class="badge sdg">SDG 4: Quality Education</span>
+              <span class="badge sdg">SDG 9: Industry & Infrastructure</span>
+              <span class="badge sdg">SDG 11: Sustainable Infrastructure</span>
+            </div>
+          </div>
+
+          <!-- Assessment Rubrics -->
+          <div class="card-title" style="margin-top:1.25rem;">Official Assessment Rubrics (Total 100 Marks)</div>
+          <div id="rubrics-container">
+            <div style="color:var(--text-muted); font-size:0.85rem;">Loading rubrics...</div>
+          </div>
+
+          <!-- Recent Database Audit Logs -->
+          <div class="card-title" style="margin-top:1.5rem;">SQLite Execution Audit Logs (Table: execution_logs)</div>
+          <div style="overflow-x:auto;">
+            <table class="data-table" id="db-logs-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Algorithm</th>
+                  <th>Cycle?</th>
+                  <th>Validation</th>
+                  <th>Executed At</th>
+                </tr>
+              </thead>
+              <tbody id="db-logs-body">
+                <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading audit logs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -616,6 +754,8 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       document.getElementById(tabId).classList.add('active');
       if (tabId === 'tab-graph') {
         renderGraph();
+      } else if (tabId === 'tab-database') {
+        fetchDatabaseInfo();
       }
     }
 
@@ -653,7 +793,6 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       const total = courses.length;
       if (total === 0) return;
 
-      // Group nodes by in-degree levels or simple circle/grid
       const centerX = W / 2;
       const centerY = H / 2;
       const radius = Math.min(W, H) * 0.38;
@@ -676,7 +815,6 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 1. Draw Directed Edges
       for (const u in graphData.adj_list) {
         const neighbors = graphData.adj_list[u];
         const p1 = nodePositions[u];
@@ -692,7 +830,6 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
           ctx.strokeStyle = isCycleEdge ? '#ef4444' : 'rgba(56, 189, 248, 0.4)';
           ctx.lineWidth = isCycleEdge ? 2.5 : 1.5;
 
-          // Arrow from p1 to p2
           const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
           const nodeR = 24;
           const startX = p1.x + nodeR * Math.cos(angle);
@@ -704,7 +841,6 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
           ctx.lineTo(endX, endY);
           ctx.stroke();
 
-          // Arrowhead
           const headLen = 9;
           ctx.beginPath();
           ctx.fillStyle = isCycleEdge ? '#ef4444' : '#38bdf8';
@@ -716,7 +852,6 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         });
       }
 
-      // 2. Draw Nodes
       for (const code in nodePositions) {
         const p = nodePositions[code];
         const isCycle = cycleNodes.has(code);
@@ -738,14 +873,12 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         ctx.fill();
         ctx.stroke();
 
-        // Node label
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 11px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(code, p.x, p.y);
 
-        // In-degree badge
         ctx.beginPath();
         ctx.arc(p.x + 16, p.y - 14, 8, 0, 2 * Math.PI);
         ctx.fillStyle = '#0f172a';
@@ -820,6 +953,85 @@ class PrerequisiteAPIHandler(http.server.BaseHTTPRequestHandler):
         tbody.appendChild(tr);
       });
       switchTabCustom('tab-tests');
+    }
+
+    async function fetchDatabaseInfo() {
+      try {
+        const res = await fetch('/api/database');
+        const data = await res.json();
+        const meta = data.assignment_metadata;
+        if (meta) {
+          if (meta.institution) document.getElementById('db-dept').innerText = meta.institution;
+          if (meta.course_code_name) document.getElementById('db-course').innerText = meta.course_code_name;
+          if (meta.assignment_title) document.getElementById('db-title').innerText = "Assignment Title: " + meta.assignment_title;
+        }
+
+        // Render Rubrics
+        const rubricsContainer = document.getElementById('rubrics-container');
+        rubricsContainer.innerHTML = '';
+        data.rubrics.forEach((r, idx) => {
+          const div = document.createElement('div');
+          div.className = 'rubric-card';
+          div.innerHTML = `
+            <div class="rubric-header">
+              <span>${idx + 1}. ${r.criteria} (${r.co_mapping})</span>
+              <span style="color:#f59e0b;">Max Marks: ${r.max_marks}</span>
+            </div>
+            <div class="rubric-grid">
+              <div><strong style="color:#34d399;">Excellent:</strong> ${r.excellent}</div>
+              <div><strong style="color:#38bdf8;">Good:</strong> ${r.good}</div>
+              <div><strong style="color:#fbbf24;">Satisfactory:</strong> ${r.satisfactory}</div>
+              <div><strong style="color:#f87171;">Needs Improvement:</strong> ${r.needs_improvement}</div>
+            </div>
+          `;
+          rubricsContainer.appendChild(div);
+        });
+
+        // Render Logs
+        const logsBody = document.getElementById('db-logs-body');
+        logsBody.innerHTML = '';
+        if (!data.recent_logs || data.recent_logs.length === 0) {
+          logsBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No execution logs recorded yet.</td></tr>';
+        } else {
+          data.recent_logs.forEach(log => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>#${log.id}</td>
+              <td><strong>${log.algorithm}</strong></td>
+              <td>${log.has_cycle ? '<span style="color:#ef4444;">YES</span>' : '<span style="color:#10b981;">NO</span>'}</td>
+              <td><span class="status-badge ${log.validation_status.includes('PASSED') ? 'status-passed' : 'status-failed'}">${log.validation_status}</span></td>
+              <td style="color:var(--text-muted); font-size:0.75rem;">${log.executed_at}</td>
+            `;
+            logsBody.appendChild(tr);
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load database info:", e);
+      }
+    }
+
+    async function saveToDB() {
+      const res = await fetch('/api/database/save', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchDatabaseInfo();
+    }
+
+    async function loadFromDB() {
+      const res = await fetch('/api/database/load', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchGraph();
+      fetchDatabaseInfo();
+    }
+
+    async function resetDB() {
+      if (!confirm("Reset database to official default CSE curriculum?")) return;
+      const res = await fetch('/api/database/reset', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchGraph();
+      fetchDatabaseInfo();
     }
 
     function renderOrder(order, hasCycle, title) {

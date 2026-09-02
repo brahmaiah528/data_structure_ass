@@ -1,9 +1,20 @@
 # One-Page Academic Project Summary
 
-**Project Title:** University Course Prerequisite Management System Using Topological Sort  
-**Course & Code:** CSA03 – Data Structures (Slot D)  
+**Department:** Department of Computer Science and Engineering  
+**Course Code & Name:** CSA03 – Data Structures – Slot D  
+**Assignment Title:** Design a graph representation of this prerequisite system and use Topological Sort to generate a valid course-taking order. Your design must also detect whether the prerequisite system contains a cycle. Analyze what the existence of a cycle means in the real-world university scenario and compare a BFS-based and DFS-based approach for solving the problem.  
 **Course Outcome:** CO5 – Develop robust graph-based solutions by implementing and analyzing graph algorithms for real-world applications.  
-**SDG Alignment:** SDG 4 (Quality Education) & SDG 9 (Industry, Innovation and Infrastructure)
+**Bloom’s Taxonomy Level:** L4 – Analyze  
+**SDG Alignment:** SDG 4 (Quality Education) & SDG 9 (Industry, Innovation and Infrastructure) with relevance to SDG 11 (Sustainable Cities and Communities)  
+**GitHub Repository:** [https://github.com/brahmaiah528/data_structure_assign](https://github.com/brahmaiah528/data_structure_assign)
+
+---
+
+### Deliverables Checklist
+1. **Pseudo Code:** Clean algorithms for graph creation, BFS Kahn, DFS 3-state, cycle detection, and validation $\to$ [docs/pseudocode.md](pseudocode.md)
+2. **Implementation & Results:** Complete Python and Java source code, SQLite database (`curriculum.db`), automated test suite (TC-01 to TC-06: 100% Passed) $\to$ [src/](file:///c:/Users/brami/OneDrive/Desktop/d1/src) & [screenshots/](file:///c:/Users/brami/OneDrive/Desktop/d1/screenshots)
+3. **GitHub Upload:** Verified and pushed to [https://github.com/brahmaiah528/data_structure_assign](https://github.com/brahmaiah528/data_structure_assign)
+4. **One Page Write-up:** This document
 
 ---
 
@@ -11,10 +22,11 @@
 Modern university curricula feature hundreds of interconnected courses where advanced subjects enforce strict prerequisite dependencies. Students and academic administrators require automated, error-free systems to determine valid course-taking sequences and to detect pathological circular dependencies that paralyze student progression.
 
 ### 2. Objective
-To design, implement, and analyze a robust directed graph system that models academic prerequisite networks, generates valid course completion schedules using BFS (Kahn's Algorithm) and DFS (3-State Coloring), detects circular prerequisite deadlocks, and validates sequential precedence.
+To design, implement, and analyze a robust directed graph system that models academic prerequisite networks, persists curriculum data in an embedded SQLite database (`curriculum.db`), generates valid course completion schedules using BFS (Kahn's Algorithm) and DFS (3-State Coloring), detects circular prerequisite deadlocks, and validates sequential precedence.
 
 ### 3. Requirements and Environment
 - **Platform:** Python 3.13 / Standard Library (Zero External Dependencies)
+- **Database:** SQLite 3 (`curriculum.db`) storing courses, prerequisites, assessment rubrics (100 marks), and execution logs
 - **Data Structures:** Adjacency List (Hash Map + Dynamic Lists), FIFO Queue (`collections.deque`), LIFO Stack, Sets
 - **Interfaces:** Dual-mode deployment featuring a desktop Tkinter GUI and an embedded localhost web dashboard (`http://localhost:8000`)
 
