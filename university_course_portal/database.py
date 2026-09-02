@@ -63,7 +63,7 @@ def init_database(db_path: str = DB_PATH) -> None:
             )
         """)
 
-        # 4. Completed Courses Table
+        # 4. Completed Courses Table (with completed_month)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS completed_courses (
                 completion_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,13 +72,14 @@ def init_database(db_path: str = DB_PATH) -> None:
                 grade TEXT NOT NULL DEFAULT 'A',
                 completion_status TEXT NOT NULL DEFAULT 'Completed',
                 completed_on TEXT NOT NULL,
+                completed_month TEXT NOT NULL DEFAULT 'May 2025',
                 UNIQUE(student_id, course_id),
                 FOREIGN KEY(student_id) REFERENCES students(student_id) ON DELETE CASCADE,
                 FOREIGN KEY(course_id) REFERENCES courses(course_id) ON DELETE CASCADE
             )
         """)
 
-        # 5. Enrollments Table
+        # 5. Enrollments Table (with teacher approval workflow)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS enrollments (
                 enrollment_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,10 +87,60 @@ def init_database(db_path: str = DB_PATH) -> None:
                 course_id INTEGER NOT NULL,
                 enrollment_date TEXT NOT NULL,
                 semester INTEGER NOT NULL,
-                status TEXT NOT NULL DEFAULT 'Enrolled',
+                status TEXT NOT NULL DEFAULT 'Approved',
+                approval_status TEXT NOT NULL DEFAULT 'Approved',
+                faculty_name TEXT DEFAULT 'Dr. K. Raman (Faculty Advisor)',
+                faculty_remarks TEXT DEFAULT 'Prerequisites verified and approved',
                 UNIQUE(student_id, course_id),
                 FOREIGN KEY(student_id) REFERENCES students(student_id) ON DELETE CASCADE,
                 FOREIGN KEY(course_id) REFERENCES courses(course_id) ON DELETE CASCADE
+            )
+        """)
+
+        # 6. Attendance Table for Running Courses
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS attendance (
+                attendance_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                course_id INTEGER NOT NULL,
+                total_classes INTEGER NOT NULL DEFAULT 40,
+                attended_classes INTEGER NOT NULL DEFAULT 35,
+                attendance_percentage REAL NOT NULL DEFAULT 87.5,
+                last_updated TEXT NOT NULL,
+                UNIQUE(student_id, course_id),
+                FOREIGN KEY(student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+                FOREIGN KEY(course_id) REFERENCES courses(course_id) ON DELETE CASCADE
+            )
+        """)
+
+        # 7. Backlogs / Arrears Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS backlogs (
+                backlog_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                course_id INTEGER NOT NULL,
+                semester INTEGER NOT NULL,
+                grade TEXT NOT NULL DEFAULT 'F',
+                academic_year TEXT NOT NULL DEFAULT '2024-2025',
+                attempt_count INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'Active Backlog',
+                exam_fee_status TEXT NOT NULL DEFAULT 'Unpaid',
+                UNIQUE(student_id, course_id),
+                FOREIGN KEY(student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+                FOREIGN KEY(course_id) REFERENCES courses(course_id) ON DELETE CASCADE
+            )
+        """)
+
+        # 8. Notifications / Announcements Table (Posted by Admin)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT 'General',
+                message TEXT NOT NULL,
+                posted_by TEXT NOT NULL DEFAULT 'Academic Administration',
+                posted_date TEXT NOT NULL,
+                priority TEXT NOT NULL DEFAULT 'Normal'
             )
         """)
         conn.commit()
@@ -339,18 +390,18 @@ def get_student_enrolled_course_ids(student_id: str, db_path: str = DB_PATH) -> 
         cursor = conn.cursor()
         cursor.execute("""
             SELECT course_id FROM enrollments 
-            WHERE student_id = ? AND status = 'Enrolled'
+            WHERE student_id = ? AND (status = 'Enrolled' OR status = 'Approved' OR status = 'Pending Teacher Approval' OR approval_status = 'Pending Teacher Approval' OR approval_status = 'Approved')
         """, (student_id.strip().upper(),))
         return {row["course_id"] for row in cursor.fetchall()}
 
 
-def add_enrollment(student_id: str, course_id: int, semester: int, enrollment_date: str, status: str = "Enrolled", db_path: str = DB_PATH) -> int:
+def add_enrollment(student_id: str, course_id: int, semester: int, enrollment_date: str, status: str = "Pending Teacher Approval", approval_status: str = "Pending Teacher Approval", faculty_name: str = "Dr. K. Raman (Faculty Advisor)", faculty_remarks: str = "Submitted for advisor review", db_path: str = DB_PATH) -> int:
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO enrollments (student_id, course_id, enrollment_date, semester, status)
-            VALUES (?, ?, ?, ?, ?)
-        """, (student_id.strip().upper(), course_id, enrollment_date, semester, status))
+            INSERT INTO enrollments (student_id, course_id, enrollment_date, semester, status, approval_status, faculty_name, faculty_remarks)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (student_id.strip().upper(), course_id, enrollment_date, semester, status, approval_status, faculty_name, faculty_remarks))
         conn.commit()
         return cursor.lastrowid
 
@@ -376,6 +427,155 @@ def get_all_enrollments(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_running_courses(student_id: str, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    """Returns currently running (approved active) courses for the student."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT e.*, c.course_code, c.course_name, c.department, c.credits, c.semester as course_semester,
+                   COALESCE(att.attendance_percentage, 85.0) as attendance_percentage,
+                   COALESCE(att.attended_classes, 34) as attended_classes,
+                   COALESCE(att.total_classes, 40) as total_classes
+            FROM enrollments e
+            JOIN courses c ON e.course_id = c.course_id
+            LEFT JOIN attendance att ON e.student_id = att.student_id AND e.course_id = att.course_id
+            WHERE e.student_id = ? AND (e.approval_status = 'Approved' OR e.status = 'Approved' OR e.status = 'Enrolled')
+            ORDER BY c.course_code
+        """, (student_id.strip().upper(),))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_pending_approvals(department: Optional[str] = None, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    """Returns enrollment requests pending teacher/faculty approval."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        if department and department != "All":
+            cursor.execute("""
+                SELECT e.*, s.name as student_name, s.department as student_dept, s.semester as student_semester, s.year as student_year,
+                       c.course_code, c.course_name, c.credits, c.semester as course_semester
+                FROM enrollments e
+                JOIN students s ON e.student_id = s.student_id
+                JOIN courses c ON e.course_id = c.course_id
+                WHERE e.approval_status = 'Pending Teacher Approval' AND s.department = ?
+                ORDER BY e.enrollment_date DESC
+            """, (department,))
+        else:
+            cursor.execute("""
+                SELECT e.*, s.name as student_name, s.department as student_dept, s.semester as student_semester, s.year as student_year,
+                       c.course_code, c.course_name, c.credits, c.semester as course_semester
+                FROM enrollments e
+                JOIN students s ON e.student_id = s.student_id
+                JOIN courses c ON e.course_id = c.course_id
+                WHERE e.approval_status = 'Pending Teacher Approval'
+                ORDER BY e.enrollment_date DESC
+            """)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def update_enrollment_approval(enrollment_id: int, approval_status: str, faculty_remarks: str = "", db_path: str = DB_PATH) -> None:
+    """Updates approval status (Approved or Rejected) and initializes attendance on approval."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        new_status = "Approved" if approval_status == "Approved" else "Rejected"
+        cursor.execute("""
+            UPDATE enrollments
+            SET approval_status = ?, status = ?, faculty_remarks = ?
+            WHERE enrollment_id = ?
+        """, (approval_status, new_status, faculty_remarks, enrollment_id))
+
+        if approval_status == "Approved":
+            cursor.execute("SELECT student_id, course_id FROM enrollments WHERE enrollment_id = ?", (enrollment_id,))
+            enr = cursor.fetchone()
+            if enr:
+                stu_id = enr["student_id"]
+                c_id = enr["course_id"]
+                now_str = datetime.now().strftime("%Y-%m-%d")
+                cursor.execute("""
+                    INSERT OR IGNORE INTO attendance (student_id, course_id, total_classes, attended_classes, attendance_percentage, last_updated)
+                    VALUES (?, ?, 40, 36, 90.0, ?)
+                """, (stu_id, c_id, now_str))
+
+        conn.commit()
+
+
+# =============================================================================
+# ATTENDANCE QUERIES
+# =============================================================================
+
+def get_student_attendance(student_id: str, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    """Returns attendance records for the student across all registered running courses."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT att.*, c.course_code, c.course_name, c.credits, c.semester,
+                   e.faculty_name
+            FROM attendance att
+            JOIN courses c ON att.course_id = c.course_id
+            LEFT JOIN enrollments e ON att.student_id = e.student_id AND att.course_id = e.course_id
+            WHERE att.student_id = ?
+            ORDER BY c.course_code
+        """, (student_id.strip().upper(),))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+# =============================================================================
+# BACKLOGS / ARREARS QUERIES
+# =============================================================================
+
+def get_student_backlogs(student_id: str, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT b.*, c.course_code, c.course_name, c.credits, c.department
+            FROM backlogs b
+            JOIN courses c ON b.course_id = c.course_id
+            WHERE b.student_id = ?
+            ORDER BY b.semester, c.course_code
+        """, (student_id.strip().upper(),))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def pay_backlog_exam_fee(backlog_id: int, db_path: str = DB_PATH) -> None:
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE backlogs 
+            SET exam_fee_status = 'Paid (Receipt: REC-2026-' || backlog_id || ')'
+            WHERE backlog_id = ?
+        """, (backlog_id,))
+        conn.commit()
+
+
+# =============================================================================
+# NOTIFICATIONS QUERIES
+# =============================================================================
+
+def get_all_notifications(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM notifications ORDER BY notification_id DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def add_notification(title: str, category: str, message: str, posted_by: str = "Office of Academic Affairs", priority: str = "Normal", db_path: str = DB_PATH) -> int:
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO notifications (title, category, message, posted_by, posted_date, priority)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (title.strip(), category.strip(), message.strip(), posted_by.strip(), now_str, priority.strip()))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def delete_notification(notification_id: int, db_path: str = DB_PATH) -> None:
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM notifications WHERE notification_id = ?", (notification_id,))
+        conn.commit()
+
+
 def get_system_stats(db_path: str = DB_PATH) -> Dict[str, int]:
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
@@ -385,14 +585,20 @@ def get_system_stats(db_path: str = DB_PATH) -> Dict[str, int]:
         total_prereqs = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM students")
         total_students = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM enrollments WHERE status = 'Enrolled'")
+        cursor.execute("SELECT COUNT(*) FROM enrollments WHERE status = 'Approved' OR status = 'Enrolled'")
         active_enrollments = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM enrollments WHERE approval_status = 'Pending Teacher Approval'")
+        pending_approvals = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM completed_courses")
         total_completions = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM notifications")
+        total_notifs = cursor.fetchone()[0]
         return {
             "total_courses": total_courses,
             "total_prerequisites": total_prereqs,
             "total_students": total_students,
             "active_enrollments": active_enrollments,
-            "total_completions": total_completions
+            "pending_approvals": pending_approvals,
+            "total_completions": total_completions,
+            "total_notifications": total_notifs
         }

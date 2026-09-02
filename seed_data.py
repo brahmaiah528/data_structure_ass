@@ -445,44 +445,134 @@ def seed_database(db_path: str) -> None:
     }
 
     completion_records = []
+    month_lookup = {
+        "2023-12": "December 2023",
+        "2024-05": "May 2024",
+        "2024-12": "December 2024",
+        "2025-05": "May 2025",
+        "2025-12": "December 2025",
+    }
     for stu_id, items in completed_plans.items():
         for c_code, grade, comp_date in items:
             if c_code in code_to_id:
-                completion_records.append((stu_id, code_to_id[c_code], grade, "Completed", comp_date))
+                comp_month = month_lookup.get(comp_date[:7], "May 2025")
+                completion_records.append((stu_id, code_to_id[c_code], grade, "Completed", comp_date, comp_month))
 
     cursor.executemany("""
-        INSERT OR IGNORE INTO completed_courses (student_id, course_id, grade, completion_status, completed_on)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO completed_courses (student_id, course_id, grade, completion_status, completed_on, completed_month)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, completion_records)
     conn.commit()
 
-    # 5. DEFINE SAMPLE ENROLLMENTS (Current active semester registrations)
+    # 5. DEFINE SAMPLE ENROLLMENTS (Running Courses with Teacher Approval)
     enrollment_plans = [
-        # Rahul Kumar (STU001) enrolled in CS105 and CS201 (since prerequisites are met)
-        ("STU001", "CS105", "2026-01-10", 4, "Enrolled"),
-        ("STU001", "CS201", "2026-01-10", 4, "Enrolled"),
-        ("STU001", "CS202", "2026-01-11", 4, "Enrolled"),
-        # Priya Sharma (STU002) enrolled in AI302 (Deep Learning) and AI303 (NLP)
-        ("STU002", "AI302", "2026-01-12", 6, "Enrolled"),
-        ("STU002", "AI303", "2026-01-12", 6, "Enrolled"),
-        # Arun Kumar (STU003) enrolled in EC204 (DSP) and EC302
-        ("STU003", "EC204", "2026-01-14", 5, "Enrolled"),
-        ("STU003", "EC302", "2026-01-14", 5, "Enrolled"),
+        # Rahul Kumar (STU001) - 3 Approved Running Courses + 1 Pending Approval
+        ("STU001", "CS201", "2026-01-10", 4, "Approved", "Approved", "Dr. K. Raman (Faculty Advisor)", "Prerequisites (CS104) verified. Approved."),
+        ("STU001", "CS105", "2026-01-10", 4, "Approved", "Approved", "Dr. K. Raman (Faculty Advisor)", "Prerequisites (CS104) verified. Approved."),
+        ("STU001", "CS202", "2026-01-11", 4, "Approved", "Approved", "Dr. K. Raman (Faculty Advisor)", "Prerequisites (CS104, CS106) verified. Approved."),
+        ("STU001", "CS203", "2026-01-15", 4, "Pending Teacher Approval", "Pending Teacher Approval", "Dr. K. Raman (Faculty Advisor)", "Submitted for advisor review"),
+
+        # Priya Sharma (STU002 - AI&DS)
+        ("STU002", "AI302", "2026-01-12", 6, "Approved", "Approved", "Dr. M. Sangeetha (HOD AI&DS)", "Approved for Semester 6 Deep Learning."),
+        ("STU002", "AI303", "2026-01-12", 6, "Approved", "Approved", "Dr. M. Sangeetha (HOD AI&DS)", "Approved for NLP specialization."),
+        
+        # Arun Kumar (STU003 - ECE)
+        ("STU003", "EC204", "2026-01-14", 5, "Approved", "Approved", "Prof. R. Venkatesh (ECE Advisor)", "Signals & Systems cleared. Approved."),
+        ("STU003", "EC302", "2026-01-14", 5, "Approved", "Approved", "Prof. R. Venkatesh (ECE Advisor)", "Approved."),
     ]
 
     enroll_records = []
-    for stu_id, c_code, en_date, sem, status in enrollment_plans:
+    for stu_id, c_code, en_date, sem, status, app_status, fac_name, remarks in enrollment_plans:
         if c_code in code_to_id:
-            enroll_records.append((stu_id, code_to_id[c_code], en_date, sem, status))
+            enroll_records.append((stu_id, code_to_id[c_code], en_date, sem, status, app_status, fac_name, remarks))
 
     cursor.executemany("""
-        INSERT OR IGNORE INTO enrollments (student_id, course_id, enrollment_date, semester, status)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO enrollments (student_id, course_id, enrollment_date, semester, status, approval_status, faculty_name, faculty_remarks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, enroll_records)
     conn.commit()
 
+    # 6. DEFINE ATTENDANCE RECORDS FOR APPROVED RUNNING COURSES
+    attendance_data = [
+        # Rahul Kumar (STU001) running courses:
+        ("STU001", "CS201", 40, 36, 90.0, "2026-09-01"), # Eligible (90%)
+        ("STU001", "CS105", 40, 34, 85.0, "2026-09-01"), # Eligible (85%)
+        ("STU001", "CS202", 40, 29, 72.5, "2026-09-01"), # Shortage warning! (72.5% < 75%)
+        # Priya Sharma (STU002):
+        ("STU002", "AI302", 40, 38, 95.0, "2026-09-01"),
+        ("STU002", "AI303", 40, 37, 92.5, "2026-09-01"),
+        # Arun Kumar (STU003):
+        ("STU003", "EC204", 40, 35, 87.5, "2026-09-01"),
+        ("STU003", "EC302", 40, 31, 77.5, "2026-09-01"),
+    ]
+    att_records = []
+    for s_id, c_code, tot, att, pct, dt in attendance_data:
+        if c_code in code_to_id:
+            att_records.append((s_id, code_to_id[c_code], tot, att, pct, dt))
+
+    cursor.executemany("""
+        INSERT OR IGNORE INTO attendance (student_id, course_id, total_classes, attended_classes, attendance_percentage, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, att_records)
+    conn.commit()
+
+    # 7. DEFINE SAMPLE BACKLOGS / ARREARS
+    backlog_data = [
+        # Arun Kumar (STU003 - ECE Sem 5) has 1 active backlog from Semester 1
+        ("STU003", "PH101", 1, "F", "2024-2025", 1, "Active Backlog", "Unpaid"),
+        # Rohan Verma (STU007 - EEE Sem 4) has 1 active backlog in Math 1
+        ("STU007", "MA101", 1, "F", "2024-2025", 2, "Active Backlog", "Paid (Receipt: REC-2026-B102)"),
+    ]
+    backlog_records = []
+    for s_id, c_code, sem, gr, ac_yr, att_cnt, st, fee_st in backlog_data:
+        if c_code in code_to_id:
+            backlog_records.append((s_id, code_to_id[c_code], sem, gr, ac_yr, att_cnt, st, fee_st))
+
+    cursor.executemany("""
+        INSERT OR IGNORE INTO backlogs (student_id, course_id, semester, grade, academic_year, attempt_count, status, exam_fee_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, backlog_records)
+    conn.commit()
+
+    # 8. DEFINE ANNOUNCEMENTS & NOTIFICATIONS POSTED BY ADMIN
+    notifications_data = [
+        ("End-Semester Theory & Practical Examination Schedule (Autumn 2026)", 
+         "Exam",
+         "The End-Semester Theory and Practical examinations for all B.Tech and MCA programmes will commence from 15th October 2026. Detailed timetable has been published on the examination portal. Hall tickets can be downloaded 7 days prior to exams by students maintaining minimum 75% attendance.",
+         "Office of the Controller of Examinations",
+         "2026-09-01 10:00",
+         "Urgent"),
+        
+        ("University Holiday Notification: Gandhi Jayanti & Autumn Break",
+         "Holiday",
+         "The University will remain closed from 2nd October to 4th October 2026 on account of Gandhi Jayanti and Autumn Festival break. Regular academic sessions and laboratory practicals will resume on Monday, 5th October 2026.",
+         "Registrar Academic Administration",
+         "2026-08-28 14:30",
+         "High"),
+
+        ("Course Enrollment & Supplementary Examination Registration Deadline",
+         "Academic",
+         "All undergraduate students must finalize course registrations for the ongoing semester. Registrations are routed to Department Faculty Advisors for approval. Last date to submit backlog supplementary examination fees is 25th September 2026.",
+         "Dean of Academic Affairs",
+         "2026-08-25 09:15",
+         "High"),
+
+        ("National 24-Hour Hackathon 'CODE-NEXUS 2026' Announcement",
+         "General",
+         "The Department of Computer Science and Engineering is organizing 'CODE-NEXUS 2026' National Hackathon on 22nd October 2026. Cash pool of Rs. 1,50,000 for top winning AI and Systems software prototypes. Register via student council.",
+         "CSE Department Council",
+         "2026-08-20 16:00",
+         "Normal")
+    ]
+
+    cursor.executemany("""
+        INSERT OR IGNORE INTO notifications (title, category, message, posted_by, posted_date, priority)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, notifications_data)
+    conn.commit()
+
     conn.close()
-    print(f"Database seeded successfully with {len(courses_data)} courses and academic records.")
+    print(f"Database seeded successfully with {len(courses_data)} courses, attendance, backlogs, and notifications.")
 
 
 if __name__ == "__main__":

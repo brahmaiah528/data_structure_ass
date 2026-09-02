@@ -64,6 +64,8 @@ def enroll_student_in_course(
         )
         return True, f"✓ Enrollment Successful! You are now enrolled in {course['course_code']} - {course['course_name']} ({course['credits']} Credits)."
     except Exception as e:
+        if "UNIQUE" in str(e):
+            return False, f"Duplicate Enrollment Blocked: You are already registered or pending approval for this course."
         return False, f"Database error during enrollment: {str(e)}"
 
 
