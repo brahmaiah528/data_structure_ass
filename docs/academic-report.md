@@ -45,16 +45,16 @@ The primary objectives of this project are:
 ## 3. Requirements and Environment Used
 
 ### Hardware & Software Environment
-- **Department:** Department of Computer Science and Engineering
-- **Operating System:** Microsoft Windows 11 / Multi-Platform POSIX compatible
-- **Programming Language:** Python 3.13.14 (Pure Standard Library)
-- **Database Engine:** Embedded SQLite 3 (`curriculum.db`) storing courses, prerequisites, metadata, rubrics, and execution logs
-- **Primary Data Structures:** Dynamic Hash Tables (`dict`), Hash Sets (`set`), FIFO Queues (`collections.deque`), LIFO Stacks (`list`), Encapsulated Entity Classes
+- **Department:** Department of Computer Science and Engineering (CSE AI)
+- **Operating System:** Microsoft Windows 11 / Multi-Platform POSIX compatible (Linux / macOS)
+- **Programming Language:** Standard ANSI C (C99 / C11) - Zero External Dependencies
+- **Compilers:** GCC, Clang, MSVC (`-Wall -Wextra -pedantic -std=c99 -O2`)
+- **Primary Data Structures:** Dynamic Adjacency List (`AdjNode*`), In-Degree Tracking Array, Circular FIFO Queue (`Queue`), LIFO Stack (`Stack`), Encapsulated `Course` Structs
 - **User Interfaces:**
-  - Desktop GUI: Python standard `tkinter` and `ttk`
-  - Localhost Web Application: Embedded `http.server` running on port 8000 with interactive SVG/Canvas
-- **Build & Execution Tools:** Standard Python interpreter (`python main.py`)
-- **Version Control:** Git & GitHub (`https://github.com/brahmaiah528/data_structure_assign`)
+  - Interactive Terminal CLI Control Menu (Options 1-12)
+  - Automated Academic Batch Runner (`--all` / `-a` flag)
+- **Build & Execution Tools:** Standard GNU `Makefile`, Windows `build.bat`, POSIX `compile.sh`
+- **Version Control:** Git & GitHub (`https://github.com/brahmaiah528/data_structure_ass`)
 
 ---
 
@@ -62,41 +62,43 @@ The primary objectives of this project are:
 The solution models the university course curriculum as a Directed Graph $G = (V, E)$:
 - **Vertices ($V$):** Each vertex represents an academic course with attributes: course code (e.g., `CS101`), course title, academic credits, and offering department.
 - **Directed Edges ($E$):** A directed edge $u \to v$ signifies that course $u$ is a prerequisite for course $v$. Thus, $u$ must be successfully completed before enrolling in $v$.
-- **Adjacency List:** Encapsulates outgoing dependency edges ($u \to \text{dependents}$) and incoming requirement edges ($v \leftarrow \text{prerequisites}$) to enable $O(1)$ amortized lookups.
-- **Dual Algorithmic Engine:** Implements both Kahn’s algorithm and DFS with vertex coloring.
-- **Verification Layer:** Formally validates all generated sequences against the prerequisite edge set.
+- **Adjacency List:** Dynamic singly-linked lists of outgoing dependency edges ($u \to \text{dependents}$) coupled with an in-degree array for $O(1)$ updates.
+- **Dual Algorithmic Engine:** Implements both Kahn’s algorithm (BFS with FIFO queue) and DFS with 3-state vertex coloring (`UNVISITED`, `VISITING`, `VISITED`).
+- **Verification Layer:** Formally validates all generated sequences against the prerequisite edge set enforcing $\text{pos}(u) < \text{pos}(v)$.
 
 ```
 +-------------------------------------------------------------------------+
-|                UNIVERSITY COURSE PREREQUISITE SYSTEM                    |
+|        UNIVERSITY COURSE PREREQUISITE SYSTEM (C IMPLEMENTATION)         |
 +-------------------------------------------------------------------------+
        |                                                 |
        v                                                 v
-[Course Model]                                   [CourseGraph]
- - code, title, credits, dept                     - Adjacency List (Out-edges)
-                                                  - Prerequisite Map (In-edges)
-                                                  - In-degree Calculator
-                                                         |
-                                 +-----------------------+-----------------------+
-                                 |                                               |
-                                 v                                               v
-                    [BFS / Kahn's Algorithm]                           [DFS 3-State Algorithm]
-                     - In-degree reduction                              - UNVISITED, VISITING, VISITED
-                     - FIFO Queue                                       - Recursion Stack
-                     - Cycle detection via count                        - Back-edge cycle detection
-                                 |                                               |
-                                 +-----------------------+-----------------------+
-                                                         |
-                                                         v
-                                              [OrderValidator Engine]
-                                               - Check: pos(u) < pos(v)
-                                               - PASSED / FAILED Report
-                                                         |
-                                 +-----------------------+-----------------------+
-                                 |                                               |
-                                 v                                               v
-                       [Desktop Tkinter GUI]                        [Localhost Web Server: 8000]
+ [Course Struct]                                  [CourseGraph]
+  - code, title, credits, dept                     - Adjacency List (Out-edges)
+                                                   - Direct in_degree array
+                                                   - Dynamic Memory Allocator
+                                                          |
+                                  +-----------------------+-----------------------+
+                                  |                                               |
+                                  v                                               v
+                     [BFS / Kahn's Algorithm]                           [DFS 3-State Algorithm]
+                      - In-degree reduction                              - UNVISITED, VISITING, VISITED
+                      - Circular FIFO Queue                              - Call Stack + Finish Stack
+                      - Queue starvation cycle test                      - Back-edge cycle extraction
+                                  |                                               |
+                                  +-----------------------+-----------------------+
+                                                          |
+                                                          v
+                                               [validate_precedence Engine]
+                                                - Formal Check: pos(u) < pos(v)
+                                                - Total Edges Audited / Violations
+                                                          |
+                                  +-----------------------+-----------------------+
+                                  |                                               |
+                                  v                                               v
+                      [Interactive CLI Menu]                       [Automated Test Runner (--all)]
+                       - Options 1 to 12                            - TC-01 through TC-06
 ```
+
 
 ---
 
@@ -240,16 +242,21 @@ flowchart TD
 ---
 
 ## 9. Implementation / Source Code
-The system is implemented across clean, modular, and fully documented source files:
-- `src/course.py`: Encapsulated Course model.
-- `src/course_graph.py`: Adjacency List graph structure with dual-direction edge mappings.
-- `src/topological_sort.py`: Kahn's BFS and 3-State DFS algorithms with step-by-step traces.
-- `src/cycle_detector.py`: Cycle path reconstruction and institutional consequence reporting.
-- `src/validator.py`: Formal precedence constraint validator.
-- `src/test_suite.py`: Automated runner for all 6 test scenarios.
-- `src/gui.py`: Tkinter desktop GUI.
-- `src/server.py`: Localhost web server and interactive SVG/Canvas dashboard.
-- `src/main.py`: Unified multi-mode application launcher.
+The system is implemented as a high-performance, modular, standalone C application with full ANSI C99 / C11 compliance:
+- `course_prerequisite_system.c`: Complete C source code encapsulating:
+  - `Course` Entity & `CourseGraph` Adjacency List engine
+  - FIFO `Queue` and LIFO `Stack` data structures
+  - BFS Kahn's Algorithm (`kahn_topological_sort`) with full queue trace
+  - DFS 3-State Coloring Algorithm (`dfs_topological_sort`, `dfs_visit`)
+  - Back-Edge detection & cycle path reconstruction
+  - Formal precedence validation (`validate_precedence`)
+  - Real-world cycle impact reporting (`print_real_world_cycle_impact`)
+  - Algorithmic comparison analysis (`print_algorithm_comparison`)
+  - 6-scenario automated test runner (`run_test_suite`)
+  - Interactive CLI control menu & automated batch mode (`--all`)
+- `Makefile`: Standard GNU build automation (`all`, `run`, `test`, `clean`).
+- `build.bat`: Windows compilation automation script.
+- `compile.sh`: POSIX compilation shell script.
 
 ---
 

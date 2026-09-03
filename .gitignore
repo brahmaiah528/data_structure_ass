@@ -1,44 +1,16 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+# Compiled binaries & objects
+*.o
+*.obj
+*.exe
+course_prerequisite_system
+course_prerequisite_system.exe
 
-# C extensions
-*.so
+# Debug symbols & folders
+*.dSYM/
+*.pdb
+*.ilk
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Virtual Environments
-venv/
-env/
-ENV/
-.venv
-
-# IDEs and Editors
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Operating System Files
+# System files
 .DS_Store
 Thumbs.db
-desktop.ini
-out/
-out_java/
+*.log
